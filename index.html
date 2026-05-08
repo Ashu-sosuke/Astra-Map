@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live SOS Tracking | AstraSOS</title>
     
+    <!-- Favicon fix -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚨</text></svg>">
+    
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-    <!-- Google Maps API -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD_jFNR3UDUiFMNza_Dz5vWStv6cUgO8ZU"></script>
+    <!-- Leaflet JS (Free Alternative to Google Maps) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
         :root {
@@ -138,49 +142,41 @@
         const history = [];
 
         function initMap() {
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 17,
-                center: { lat: 0, lng: 0 },
-                styles: [
-                    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-                    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] }
-                ],
-                disableDefaultUI: true,
-                zoomControl: true
-            });
+            // Initialize map with a dark theme (CartoDB Dark Matter)
+            map = L.map('map', {
+                zoomControl: true,
+                attributionControl: false
+            }).setView([0, 0], 17);
 
-            marker = new google.maps.Marker({
-                map: map,
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 10,
-                    fillColor: "#FF3B30",
-                    fillOpacity: 1,
-                    strokeColor: "white",
-                    strokeWeight: 2,
-                },
-                title: "User Location"
-            });
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(map);
 
-            path = new google.maps.Polyline({
-                map: map,
-                strokeColor: "#FF3B30",
-                strokeOpacity: 0.6,
-                strokeWeight: 4,
-            });
+            // Create a custom red circle marker for the user
+            marker = L.circleMarker([0, 0], {
+                radius: 10,
+                fillColor: "#FF3B30",
+                color: "#FFFFFF",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 1
+            }).addTo(map);
+
+            path = L.polyline([], {
+                color: '#FF3B30',
+                weight: 4,
+                opacity: 0.6
+            }).addTo(map);
         }
 
         function updateUI(lat, lng) {
-            const pos = { lat, lng };
+            const pos = [lat, lng];
             
-            marker.setPosition(pos);
+            marker.setLatLng(pos);
             map.panTo(pos);
             
             history.push(pos);
-            path.setPath(history);
+            path.setLatLngs(history);
 
             document.getElementById("statusText").innerText = "LIVE • User Moving";
             document.getElementById("coords").innerText = `LAT: ${lat.toFixed(6)} | LNG: ${lng.toFixed(6)}`;
