@@ -1,85 +1,221 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live SOS Tracking | AstraSOS</title>
+    
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Google Maps API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD_jFNR3UDUiFMNza_Dz5vWStv6cUgO8ZU"></script>
 
-<title>Live SOS Tracking</title>
+    <style>
+        :root {
+            --primary: #FF3B30;
+            --secondary: #1A73E8;
+            --bg: #0F172A;
+            --card: #1E293B;
+            --text: #F8FAFC;
+        }
 
-<style>
-html, body {
-  margin:0;
-  padding:0;
-  height:100%;
-}
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
 
-#map {
-  height:100%;
-  width:100%;
-}
-</style>
+        #map {
+            height: 100%;
+            width: 100%;
+            filter: grayscale(0.2) contrast(1.1);
+        }
 
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+        .overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 1000;
+            pointer-events: none;
+        }
 
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD_jFNR3UDUiFMNza_Dz5vWStv6cUgO8ZU"></script>
+        .status-card {
+            background: rgba(30, 41, 59, 0.9);
+            backdrop-filter: blur(12px);
+            padding: 16px 24px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            max-width: fit-content;
+            pointer-events: auto;
+        }
 
+        .pulse {
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 0 rgba(255, 59, 48, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+        }
+
+        .info h1 {
+            margin: 0;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.7;
+        }
+
+        .info p {
+            margin: 4px 0 0;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .coords-box {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #10B981;
+            border: 1px solid #10B981;
+        }
+
+        /* Dark mode map styles */
+        .gm-style {
+            background-color: #0F172A !important;
+        }
+    </style>
 </head>
-
 <body>
 
-<div id="map"></div>
+    <div id="map"></div>
 
-<script>
+    <div class="overlay">
+        <div class="status-card" id="statusCard">
+            <div class="pulse"></div>
+            <div class="info">
+                <h1>Emergency Tracking</h1>
+                <p id="statusText">Awaiting Signal...</p>
+            </div>
+        </div>
+    </div>
 
-// read incident id
-const params = new URLSearchParams(window.location.search)
-const incidentId = params.get("incident")
+    <div class="coords-box" id="coords">
+        LAT: --.----- | LNG: --.-----
+    </div>
 
-// firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyAyUBR-SVWaXqASSJ3V8nbLdKN8vMlvDUo",
-  authDomain: "astrasos-278a5.firebaseapp.com",
-  projectId: "astrasos-278a5"
-}
+    <script>
+        const SUPABASE_URL = "https://yufngipguuuxdvyucpef.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1Zm5naXBndXV1eGR2eXVjcGVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczOTQ2NTYsImV4cCI6MjA5Mjk3MDY1Nn0.M555FF8jZoxS850ToFFquyylqzADQ-WnSE9hkaLzZyo";
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-firebase.initializeApp(firebaseConfig)
+        const params = new URLSearchParams(window.location.search);
+        const incidentId = params.get("incident");
 
-const db = firebase.firestore()
+        let map, marker, path;
+        const history = [];
 
-// create map
-const map = new google.maps.Map(document.getElementById("map"), {
-  zoom: 16,
-  center: { lat: 0, lng: 0 }
-})
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 17,
+                center: { lat: 0, lng: 0 },
+                styles: [
+                    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] }
+                ],
+                disableDefaultUI: true,
+                zoomControl: true
+            });
 
-// marker
-const marker = new google.maps.Marker({
-  map: map,
-  title: "Live Location"
-})
+            marker = new google.maps.Marker({
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 10,
+                    fillColor: "#FF3B30",
+                    fillOpacity: 1,
+                    strokeColor: "white",
+                    strokeWeight: 2,
+                },
+                title: "User Location"
+            });
 
-// listen for updates
-db.collection("live_locations")
-.doc(incidentId)
-.onSnapshot(function(doc){
+            path = new google.maps.Polyline({
+                map: map,
+                strokeColor: "#FF3B30",
+                strokeOpacity: 0.6,
+                strokeWeight: 4,
+            });
+        }
 
-  if(!doc.exists) return
+        function updateUI(lat, lng) {
+            const pos = { lat, lng };
+            
+            marker.setPosition(pos);
+            map.panTo(pos);
+            
+            history.push(pos);
+            path.setPath(history);
 
-  const data = doc.data()
+            document.getElementById("statusText").innerText = "LIVE • User Moving";
+            document.getElementById("coords").innerText = `LAT: ${lat.toFixed(6)} | LNG: ${lng.toFixed(6)}`;
+        }
 
-  const lat = data.lat
-  const lng = data.lng
+        // Initialize
+        initMap();
 
-  const position = { lat: lat, lng: lng }
+        if (incidentId) {
+            console.log("Subscribing to incident:", incidentId);
+            
+            // 1. Fetch initial location from DB
+            supabaseClient.from('live_locations')
+                .select('*')
+                .eq('incident_id', incidentId)
+                .single()
+                .then(({ data }) => {
+                    if (data) updateUI(data.latitude, data.longitude);
+                });
 
-  marker.setPosition(position)
-
-  map.panTo(position)
-
-})
-
-</script>
-
+            // 2. Listen for Realtime Broadcasts
+            const channel = supabaseClient.channel(`location:${incidentId}`)
+                .on('broadcast', { event: 'location_update' }, (payload) => {
+                    console.log("Broadcast received:", payload);
+                    const { latitude, longitude } = payload.payload;
+                    updateUI(latitude, longitude);
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log("Subscribed to realtime channel");
+                    }
+                });
+        } else {
+            document.getElementById("statusText").innerText = "Error: No Incident ID";
+        }
+    </script>
 </body>
-
 </html>
