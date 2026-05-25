@@ -8,20 +8,29 @@
     <!-- Favicon fix -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚨</text></svg>">
     
+    <!-- Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-    <!-- Leaflet JS (Free Alternative to Google Maps) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Google Maps JS API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD_jFNR3UDUiFMNza_Dz5vWStv6cUgO8ZU&callback=initMap" async defer></script>
 
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
         :root {
             --primary: #FF3B30;
+            --primary-rgb: 255, 59, 48;
             --secondary: #1A73E8;
-            --bg: #0F172A;
-            --card: #1E293B;
+            --bg: #090D16;
+            --card: rgba(22, 28, 45, 0.85);
+            --border: rgba(255, 255, 255, 0.08);
             --text: #F8FAFC;
+            --text-muted: #94A3B8;
         }
 
         body, html {
@@ -32,82 +41,389 @@
             background: var(--bg);
             color: var(--text);
             overflow: hidden;
+            -webkit-font-smoothing: antialiased;
         }
 
         #map {
             height: 100%;
             width: 100%;
-            filter: grayscale(0.2) contrast(1.1);
+            z-index: 1;
         }
 
+        /* Glassmorphic Overlay Container */
         .overlay {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             z-index: 1000;
             pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px;
         }
 
-        .status-card {
-            background: rgba(30, 41, 59, 0.9);
-            backdrop-filter: blur(12px);
-            padding: 16px 24px;
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .status-header {
+            background: var(--card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 14px 20px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
             display: flex;
             align-items: center;
-            gap: 16px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            max-width: fit-content;
+            justify-content: space-between;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             pointer-events: auto;
+            max-width: 480px;
+            width: calc(100% - 40px);
+            margin: 0 auto;
+        }
+
+        .status-badge-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .pulse {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             background: var(--primary);
             border-radius: 50%;
-            box-shadow: 0 0 0 rgba(255, 59, 48, 0.4);
+            box-shadow: 0 0 0 rgba(var(--primary-rgb), 0.4);
             animation: pulse 2s infinite;
+            flex-shrink: 0;
+        }
+
+        .pulse.safe {
+            background: #10B981;
+            box-shadow: none;
+            animation: none;
         }
 
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(var(--primary-rgb), 0); }
+            100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
         }
 
-        .info h1 {
-            margin: 0;
-            font-size: 14px;
+        .status-title {
+            font-size: 10px;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.7;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin: 0;
         }
 
-        .info p {
-            margin: 4px 0 0;
+        .status-text {
+            font-size: 15px;
+            font-weight: 700;
+            margin: 2px 0 0 0;
+            color: var(--text);
+        }
+
+        .status-header.safe-theme {
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
+        /* Slide-up details panel */
+        .details-panel {
+            background: var(--card);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border);
+            border-radius: 28px 28px 0 0;
+            padding: 16px 20px 24px 20px;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+            pointer-events: auto;
+            z-index: 1001;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+            max-width: 480px;
+            width: calc(100% - 40px);
+            margin: 0 auto;
+            transform: translateY(0);
+        }
+
+        /* Mobile Collapsible Panel Styling */
+        .details-panel.collapsed {
+            transform: translateY(calc(100% - 78px));
+        }
+
+        .panel-handle {
+            width: 44px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            margin: -4px auto 14px auto;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .panel-handle:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 18px;
             font-weight: 700;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            overflow: hidden;
         }
 
-        .coords-box {
-            position: absolute;
-            bottom: 30px;
-            right: 20px;
-            background: rgba(0,0,0,0.8);
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-family: monospace;
+        .user-info h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .user-info p {
+            margin: 2px 0 0 0;
             font-size: 12px;
-            color: #10B981;
-            border: 1px solid #10B981;
+            color: var(--text-muted);
         }
 
-        /* Dark mode map styles */
-        .gm-style {
-            background-color: #0F172A !important;
+        .badge {
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .badge-pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: #F59E0B;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-critical {
+            background: rgba(239, 68, 68, 0.15);
+            color: #EF4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            animation: pulse-border 1.5s infinite;
+        }
+
+        .badge-high {
+            background: rgba(245, 158, 11, 0.15);
+            color: #F59E0B;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-safe, .badge-resolved, .badge-low {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10B981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: rgba(239, 68, 68, 0.3); }
+            50% { border-color: rgba(239, 68, 68, 0.8); }
+            100% { border-color: rgba(239, 68, 68, 0.3); }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .metric-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+
+        .stress-bar {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.4s ease;
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin: 16px 0 8px 0;
+        }
+
+        .content-card {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 14px 16px;
+            max-height: 85px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .content-card p {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #E2E8F0;
+        }
+
+        .situation-card {
+            border-left: 3px solid var(--secondary);
+        }
+
+        .transcript-card {
+            border-left: 3px solid var(--primary);
+            font-style: italic;
+        }
+
+        /* Action buttons */
+        .action-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 13px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #E02B20;
+            box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        /* Pulsing Live Marker Styles */
+        .live-marker {
+            position: relative;
+            width: 20px;
+            height: 20px;
+        }
+        
+        .live-marker .dot {
+            width: 14px;
+            height: 14px;
+            background: #007AFF;
+            border: 3px solid #FFFFFF;
+            border-radius: 50%;
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: background 0.3s ease;
+        }
+
+        .live-marker.safe .dot {
+            background: #10B981;
+        }
+
+        .live-marker .ring {
+            width: 30px;
+            height: 30px;
+            border: 2px solid #007AFF;
+            border-radius: 50%;
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            opacity: 0;
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.610, 0.355, 1) infinite;
+            pointer-events: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .live-marker.safe .ring {
+            border-color: #10B981;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.5);
+                opacity: 0.8;
+            }
+            80%, 100% {
+                transform: scale(1.8);
+                opacity: 0;
+            }
         }
     </style>
 </head>
@@ -116,17 +432,75 @@
     <div id="map"></div>
 
     <div class="overlay">
-        <div class="status-card" id="statusCard">
-            <div class="pulse"></div>
-            <div class="info">
-                <h1>Emergency Tracking</h1>
-                <p id="statusText">Awaiting Signal...</p>
+        <!-- Floating Status Bar -->
+        <div class="status-header" id="statusCard">
+            <div class="status-badge-container">
+                <div class="pulse" id="statusPulse"></div>
+                <div>
+                    <h1 class="status-title" id="statusLabel">AstraSOS Signal</h1>
+                    <p class="status-text" id="statusText">Awaiting Signal...</p>
+                </div>
             </div>
         </div>
-    </div>
+        
+        <!-- Collapsible Details Sheet -->
+        <div class="details-panel" id="detailsPanel">
+            <div class="panel-handle" onclick="togglePanel()"></div>
+            
+            <div class="panel-header">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">👤</div>
+                    <div>
+                        <h2 id="userName">SOS Incident</h2>
+                        <p id="timeElapsed">SOS active • 00:00:00</p>
+                    </div>
+                </div>
+                <div id="severityBadge" class="badge badge-pending">PENDING</div>
+            </div>
 
-    <div class="coords-box" id="coords">
-        LAT: --.----- | LNG: --.-----
+            <div class="panel-content">
+                <!-- Metrics Grid -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-label">Threat Mode</span>
+                        <span class="metric-value" id="threatType">Classifying...</span>
+                    </div>
+                    <div class="metric-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span class="metric-label">Distress Score</span>
+                            <span class="metric-value" id="stressScore">--%</span>
+                        </div>
+                        <div class="stress-bar-container">
+                            <div class="stress-bar" id="stressBar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Situation Intel Card -->
+                <div class="section-title">Situation Intelligence</div>
+                <div class="content-card situation-card">
+                    <p id="incidentSummary">Analyzing emergency situation details...</p>
+                </div>
+
+                <!-- Live Transcription Card -->
+                <div class="section-title">Live Audio Transcript</div>
+                <div class="content-card transcript-card">
+                    <p id="incidentTranscript">Awaiting voice segments...</p>
+                </div>
+
+                <!-- Call and Navigation Actions -->
+                <div class="action-row">
+                    <a href="#" id="directionsBtn" target="_blank" class="action-btn btn-secondary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                        Directions
+                    </a>
+                    <a href="#" id="callBtn" class="action-btn btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        Call User
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -140,77 +514,396 @@
 
         let map, marker, path;
         const history = [];
+        let activeTimer = null;
+
+        // Custom Google Maps Dark Theme JSON Styling
+        const darkMapStyle = [
+            { elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#1e293b" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+            {
+                featureType: "administrative.locality",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#cbd5e1" }]
+            },
+            {
+                featureType: "poi",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#cbd5e1" }]
+            },
+            {
+                featureType: "poi.park",
+                elementType: "geometry",
+                stylers: [{ color: "#0f172a" }]
+            },
+            {
+                featureType: "poi.park",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#64748b" }]
+            },
+            {
+                featureType: "road",
+                elementType: "geometry",
+                stylers: [{ color: "#0f172a" }]
+            },
+            {
+                featureType: "road",
+                elementType: "geometry.stroke",
+                stylers: [{ color: "#1e293b" }]
+            },
+            {
+                featureType: "road",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#94a3b8" }]
+            },
+            {
+                featureType: "road.highway",
+                elementType: "geometry",
+                stylers: [{ color: "#334155" }]
+            },
+            {
+                featureType: "road.highway",
+                elementType: "geometry.stroke",
+                stylers: [{ color: "#475569" }]
+            },
+            {
+                featureType: "road.highway",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#f8fafc" }]
+            },
+            {
+                featureType: "transit",
+                elementType: "geometry",
+                stylers: [{ color: "#1e293b" }]
+            },
+            {
+                featureType: "transit.station",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#cbd5e1" }]
+            },
+            {
+                featureType: "water",
+                elementType: "geometry",
+                stylers: [{ color: "#090d16" }]
+            },
+            {
+                featureType: "water",
+                elementType: "labels.text.fill",
+                stylers: [{ color: "#475569" }]
+            },
+            {
+                featureType: "water",
+                elementType: "labels.text.stroke",
+                stylers: [{ color: "#090d16" }]
+            }
+        ];
 
         function initMap() {
-            // Initialize map with a dark theme (CartoDB Dark Matter)
-            map = L.map('map', {
+            // Define custom HTMLMarker class inside initMap (since Google Maps API is loaded)
+            class CustomHTMLMarker extends google.maps.OverlayView {
+                constructor(latlng, map, html) {
+                    super();
+                    this.latlng = latlng;
+                    this.html = html;
+                    this.setMap(map);
+                }
+
+                onAdd() {
+                    this.div = document.createElement('div');
+                    this.div.style.position = 'absolute';
+                    this.div.innerHTML = this.html;
+                    const panes = this.getPanes();
+                    panes.overlayImage.appendChild(this.div);
+                }
+
+                draw() {
+                    const overlayProjection = this.getProjection();
+                    const position = overlayProjection.fromLatLngToDivPixel(this.latlng);
+                    if (position && this.div) {
+                        this.div.style.left = (position.x - 10) + 'px';
+                        this.div.style.top = (position.y - 10) + 'px';
+                    }
+                }
+
+                onRemove() {
+                    if (this.div) {
+                        this.div.parentNode.removeChild(this.div);
+                        this.div = null;
+                    }
+                }
+
+                setPosition(latlng) {
+                    this.latlng = latlng;
+                    this.draw();
+                }
+            }
+
+            const defaultCenter = new google.maps.LatLng(0, 0);
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 17,
+                center: defaultCenter,
+                disableDefaultUI: true,
                 zoomControl: true,
-                attributionControl: false
-            }).setView([0, 0], 17);
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+                styles: darkMapStyle
+            });
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                maxZoom: 19
-            }).addTo(map);
+            // Create custom pulsing overlay marker
+            const liveMarkerHtml = '<div class="live-marker" id="liveMarker"><div class="ring"></div><div class="dot"></div></div>';
+            marker = new CustomHTMLMarker(defaultCenter, map, liveMarkerHtml);
 
-            // Create a custom red circle marker for the user
-            marker = L.circleMarker([0, 0], {
-                radius: 10,
-                fillColor: "#FF3B30",
-                color: "#FFFFFF",
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 1
-            }).addTo(map);
+            // Polyline configuration
+            path = new google.maps.Polyline({
+                path: [],
+                geodesic: true,
+                strokeColor: '#FF3B30',
+                strokeOpacity: 0.6,
+                strokeWeight: 4,
+                map: map
+            });
 
-            path = L.polyline([], {
-                color: '#FF3B30',
-                weight: 4,
-                opacity: 0.6
-            }).addTo(map);
+            // Run Supabase initialization and tracking subscriptions
+            if (incidentId) {
+                setupSupabaseTracking();
+            }
         }
 
         function updateUI(lat, lng) {
-            const pos = [lat, lng];
+            const pos = new google.maps.LatLng(lat, lng);
             
-            marker.setLatLng(pos);
+            if (marker && typeof marker.setPosition === 'function') {
+                marker.setPosition(pos);
+            }
             map.panTo(pos);
             
             history.push(pos);
-            path.setLatLngs(history);
+            path.setPath(history);
 
             document.getElementById("statusText").innerText = "LIVE • User Moving";
-            document.getElementById("coords").innerText = `LAT: ${lat.toFixed(6)} | LNG: ${lng.toFixed(6)}`;
+            
+            // Update directions button
+            document.getElementById("directionsBtn").href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
         }
 
-        // Initialize
-        initMap();
+        function togglePanel() {
+            const panel = document.getElementById("detailsPanel");
+            panel.classList.toggle("collapsed");
+        }
 
-        if (incidentId) {
-            console.log("Subscribing to incident:", incidentId);
+        function startTimer(startTimeString) {
+            if (activeTimer) clearInterval(activeTimer);
+            const startTime = new Date(startTimeString).getTime();
             
-            // 1. Fetch initial location from DB
+            function updateTimer() {
+                const elapsedMs = Date.now() - startTime;
+                const totalSec = Math.floor(elapsedMs / 1000);
+                if (totalSec < 0) return;
+                
+                const hrs = Math.floor(totalSec / 3600);
+                const mins = Math.floor((totalSec % 3600) / 60);
+                const secs = totalSec % 60;
+                
+                const formatted = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                document.getElementById("timeElapsed").innerText = `SOS active • ${formatted}`;
+            }
+            
+            updateTimer();
+            activeTimer = setInterval(updateTimer, 1000);
+        }
+
+        function stopTimer() {
+            if (activeTimer) {
+                clearInterval(activeTimer);
+                activeTimer = null;
+            }
+            document.getElementById("timeElapsed").innerText = "SOS Terminated";
+        }
+
+        function setSafeUI(lat, lng) {
+            document.getElementById("statusText").innerText = "RESOLVED • User is Safe";
+            document.getElementById("statusLabel").innerText = "AstraSOS Status";
+            
+            const pulseDot = document.getElementById("statusPulse");
+            if (pulseDot) pulseDot.classList.add("safe");
+            
+            document.getElementById("statusCard").classList.add("safe-theme");
+            
+            const badge = document.getElementById("severityBadge");
+            if (badge) {
+                badge.innerText = "SAFE";
+                badge.className = "badge badge-safe";
+            }
+            
+            stopTimer();
+
+            const liveMarkerDiv = document.getElementById("liveMarker");
+            if (liveMarkerDiv) {
+                liveMarkerDiv.classList.add("safe");
+            }
+            
+            if (marker && lat !== undefined && lng !== undefined) {
+                const pos = new google.maps.LatLng(lat, lng);
+                if (typeof marker.setPosition === 'function') {
+                    marker.setPosition(pos);
+                }
+                map.panTo(pos);
+            }
+        }
+
+        function updateIncidentUI(incident) {
+            if (!incident) return;
+            
+            // Update Threat Type
+            const threatEl = document.getElementById("threatType");
+            if (threatEl) {
+                threatEl.innerText = incident.threat_type || "Classifying...";
+            }
+            
+            // Update Stress level
+            const stressValEl = document.getElementById("stressScore");
+            const stressBar = document.getElementById("stressBar");
+            if (incident.stress_score !== undefined && incident.stress_score !== null) {
+                const score = parseFloat(incident.stress_score);
+                const pct = Math.round(score * 100);
+                if (stressValEl) stressValEl.innerText = `${pct}%`;
+                if (stressBar) {
+                    stressBar.style.width = `${pct}%`;
+                    if (score > 0.7) {
+                        stressBar.style.backgroundColor = "#FF3B30"; // Red
+                    } else if (score > 0.4) {
+                        stressBar.style.backgroundColor = "#F59E0B"; // Orange
+                    } else {
+                        stressBar.style.backgroundColor = "#10B981"; // Green
+                    }
+                }
+            }
+            
+            // Update Severity badge
+            const badge = document.getElementById("severityBadge");
+            if (badge) {
+                const severity = (incident.final_severity || incident.severity || "PENDING").toUpperCase();
+                badge.innerText = severity;
+                badge.className = `badge badge-${severity.toLowerCase()}`;
+            }
+
+            // Update Summary
+            const summaryEl = document.getElementById("incidentSummary");
+            if (summaryEl) {
+                summaryEl.innerText = incident.summary || "Analyzing situation details...";
+            }
+
+            // Update Transcript
+            const transcriptEl = document.getElementById("incidentTranscript");
+            if (transcriptEl) {
+                transcriptEl.innerText = incident.transcript || "Awaiting voice segments...";
+            }
+
+            // Update Emergency Status
+            if (incident.is_emergency === false) {
+                setSafeUI(parseFloat(incident.latitude), parseFloat(incident.longitude));
+            }
+        }
+
+        function setupSupabaseTracking() {
+            console.log("Subscribing to incident ID:", incidentId);
+            
+            // Fetch initial incident record
+            supabaseClient.from('incidents')
+                .select('*')
+                .eq('id', incidentId)
+                .single()
+                .then(({ data: incident }) => {
+                    if (incident) {
+                        updateIncidentUI(incident);
+                        startTimer(incident.created_at);
+                        
+                        // Set directions button initial href
+                        if (incident.latitude && incident.longitude) {
+                            const lat = parseFloat(incident.latitude);
+                            const lng = parseFloat(incident.longitude);
+                            document.getElementById("directionsBtn").href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+                            updateUI(lat, lng);
+                        }
+
+                        // Fetch User Information (public read names allowed)
+                        supabaseClient.from('users')
+                            .select('full_name, phone, avatar_url')
+                            .eq('id', incident.user_id)
+                            .single()
+                            .then(({ data: user }) => {
+                                if (user) {
+                                    if (user.full_name) document.getElementById("userName").innerText = user.full_name;
+                                    if (user.avatar_url) {
+                                        document.getElementById("userAvatar").innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+                                    } else if (user.full_name) {
+                                        document.getElementById("userAvatar").innerText = user.full_name.charAt(0).toUpperCase();
+                                    }
+                                    if (user.phone) {
+                                        document.getElementById("callBtn").href = `tel:${user.phone}`;
+                                    }
+                                }
+                            });
+                    }
+                });
+
+            // 1. Fetch initial live coordinates from DB
             supabaseClient.from('live_locations')
                 .select('*')
                 .eq('incident_id', incidentId)
                 .single()
                 .then(({ data }) => {
-                    if (data) updateUI(data.latitude, data.longitude);
+                    if (data) {
+                        updateUI(data.latitude, data.longitude);
+                    } else {
+                        // Fallback: If no live location row, check if the incident itself exists and is resolved/safe
+                        supabaseClient.from('incidents')
+                            .select('is_emergency, latitude, longitude')
+                            .eq('id', incidentId)
+                            .single()
+                            .then(({ data: incident }) => {
+                                if (incident && incident.is_emergency === false) {
+                                    setSafeUI(parseFloat(incident.latitude), parseFloat(incident.longitude));
+                                } else {
+                                    document.getElementById("statusText").innerText = "OFFLINE • Signal Lost";
+                                }
+                            });
+                    }
                 });
 
-            // 2. Listen for Realtime Broadcasts
-            const channel = supabaseClient.channel(`location:${incidentId}`)
+            // 2. Listen for Realtime Location Broadcasts
+            const locationChannel = supabaseClient.channel(`location:${incidentId}`)
                 .on('broadcast', { event: 'location_update' }, (payload) => {
                     console.log("Broadcast received:", payload);
                     const { latitude, longitude } = payload.payload;
                     updateUI(latitude, longitude);
                 })
+                .on('broadcast', { event: 'user_safe' }, (payload) => {
+                    console.log("User Safe event received:", payload);
+                    setSafeUI();
+                })
                 .subscribe((status) => {
                     if (status === 'SUBSCRIBED') {
-                        console.log("Subscribed to realtime channel");
+                        console.log("Subscribed to location realtime channel");
                     }
                 });
-        } else {
-            document.getElementById("statusText").innerText = "Error: No Incident ID";
+
+            // 3. Listen to database changes for incident updates (e.g. AI parsing complete)
+            const dbChannel = supabaseClient.channel(`incident_db:${incidentId}`)
+                .on(
+                    'postgres_changes',
+                    { event: 'UPDATE', schema: 'public', table: 'incidents', filter: `id=eq.${incidentId}` },
+                    (payload) => {
+                        console.log("Database incident update:", payload.new);
+                        updateIncidentUI(payload.new);
+                    }
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log("Subscribed to database update events");
+                    }
+                });
         }
     </script>
 </body>
