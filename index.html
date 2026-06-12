@@ -807,15 +807,23 @@
         }
 
         function setupSupabaseTracking() {
-            console.log("Subscribing to incident ID:", incidentId);
+            console.log("Subscribing to incident ID via RPC:", incidentId);
             
-            // Fetch initial incident record
-            supabaseClient.from('incidents')
-                .select('*')
-                .eq('id', incidentId)
-                .single()
-                .then(({ data: incident }) => {
+            // Keep a local reference to the incident status for fallback checks
+            let initialIncident = null;
+
+            // Fetch initial incident record using secure RPC
+            supabaseClient.rpc('get_incident_by_id', { incident_id: incidentId })
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error("Error fetching incident via RPC:", error);
+                        document.getElementById("statusText").innerText = "ERROR • Access Denied";
+                        return;
+                    }
+                    
+                    const incident = data && data[0];
                     if (incident) {
+                        initialIncident = incident;
                         updateIncidentUI(incident);
                         startTimer(incident.created_at);
                         
@@ -826,29 +834,12 @@
                             document.getElementById("directionsBtn").href = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
                             updateUI(lat, lng);
                         }
-
-                        // Fetch User Information (public read names allowed)
-                        supabaseClient.from('users')
-                            .select('full_name, phone, avatar_url')
-                            .eq('id', incident.user_id)
-                            .single()
-                            .then(({ data: user }) => {
-                                if (user) {
-                                    if (user.full_name) document.getElementById("userName").innerText = user.full_name;
-                                    if (user.avatar_url) {
-                                        document.getElementById("userAvatar").innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
-                                    } else if (user.full_name) {
-                                        document.getElementById("userAvatar").innerText = user.full_name.charAt(0).toUpperCase();
-                                    }
-                                    if (user.phone) {
-                                        document.getElementById("callBtn").href = `tel:${user.phone}`;
-                                    }
-                                }
-                            });
+                    } else {
+                        document.getElementById("statusText").innerText = "OFFLINE • Incident Not Found";
                     }
                 });
 
-            // 1. Fetch initial live coordinates from DB
+            // 1. Fetch initial live coordinates from DB (will succeed if user is authenticated/authorized, or fallback)
             supabaseClient.from('live_locations')
                 .select('*')
                 .eq('incident_id', incidentId)
@@ -857,20 +848,19 @@
                     if (data) {
                         updateUI(data.latitude, data.longitude);
                     } else {
-                        // Fallback: If no live location row, check if the incident itself exists and is resolved/safe
-                        supabaseClient.from('incidents')
-                            .select('is_emergency, latitude, longitude')
-                            .eq('id', incidentId)
-                            .single()
-                            .then(({ data: incident }) => {
-                                if (incident && incident.is_emergency === false) {
-                                    setSafeUI(parseFloat(incident.latitude), parseFloat(incident.longitude));
-                                } else {
-                                    document.getElementById("statusText").innerText = "OFFLINE • Signal Lost";
-                                }
-                            });
+                        // Fallback: If no live location row, check if the RPC-loaded incident is resolved
+                        if (initialIncident) {
+                            if (initialIncident.status === 'RESOLVED' || initialIncident.is_emergency === false) {
+                                setSafeUI(parseFloat(initialIncident.latitude), parseFloat(initialIncident.longitude));
+                            } else {
+                                document.getElementById("statusText").innerText = "OFFLINE • Signal Lost";
+                            }
+                        } else {
+                            document.getElementById("statusText").innerText = "OFFLINE • Signal Lost";
+                        }
                     }
                 });
+
 
             // 2. Listen for Realtime Location Broadcasts
             const locationChannel = supabaseClient.channel(`location:${incidentId}`)
